@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIKC — Gerador de Orçamentos</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --preto: #0a0a0a; --amarelo: #FFC72C;
+    --cinza-claro: #f5f5f5; --cinza-borda: #e0e0e0;
+    --cinza-texto: #666; --branco: #ffffff;
+    --azul-edicao: #2563eb;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--cinza-claro); color: var(--preto); min-height: 100vh; padding: 16px; }
+  header { background: var(--preto); color: var(--branco); padding: 14px 22px; border-radius: 8px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  header h1 { font-size: 18px; font-weight: 700; }
+  header h1 span { color: var(--amarelo); }
+  header .subtitulo { font-size: 12px; color: #bbb; margin-top: 2px; }
+  .badges { display: flex; gap: 6px; align-items: center; }
+  .badge-cliente { background: var(--amarelo); color: var(--preto); padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+  .badge-edicao { background: var(--azul-edicao); color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+  .badge-edicao.off { background: transparent; border: 1px solid #555; color: #999; cursor: pointer; }
+
+  .container { display: grid; grid-template-columns: 440px 1fr; gap: 16px; max-width: 1700px; margin: 0 auto; }
+  @media (max-width: 900px) { .container { grid-template-columns: 1fr; } .painel-controles { position: static !important; max-height: none !important; } }
+
+  .painel { background: var(--branco); border-radius: 8px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .painel-controles { height: fit-content; max-height: calc(100vh - 100px); overflow-y: auto; position: sticky; top: 16px; }
+
+  .secao { margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--cinza-borda); }
+  .secao:last-child { border-bottom: none; padding-bottom: 0; }
+  .secao-titulo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .secao-titulo .numero { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--amarelo); color: var(--preto); font-size: 11px; }
+
+  .grupo { margin-bottom: 10px; }
+  .grupo-label-linha { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 6px; }
+  .grupo label { font-size: 11px; font-weight: 600; color: var(--cinza-texto); display: block; }
+  .btn-posicionar { background: var(--azul-edicao); color: white; border: none; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 600; cursor: pointer; display: none; width: auto; }
+  .btn-posicionar:hover { background: #1d4ed8; }
+  .btn-posicionar.ativo { background: #c00; animation: piscar 0.8s infinite; }
+  @keyframes piscar { 50% { opacity: 0.5; } }
+
+  .coords-edicao { display: none; gap: 6px; margin-top: 4px; }
+  .coords-edicao input { width: 70px; padding: 4px 6px; font-size: 11px; font-family: "SF Mono", Monaco, monospace; border: 1px solid var(--azul-edicao); border-radius: 4px; }
+  .coords-edicao span { font-size: 10px; color: var(--azul-edicao); font-weight: 700; align-self: center; }
+
+  body.modo-edicao .btn-posicionar { display: inline-block; }
+  body.modo-edicao .coords-edicao { display: flex; }
+
+  input[type="file"] { width: 100%; padding: 8px; border: 2px dashed var(--cinza-borda); border-radius: 6px; background: var(--cinza-claro); cursor: pointer; font-size: 12px; }
+  input[type="file"]:hover { border-color: var(--amarelo); }
+
+  input[type="text"], textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--cinza-borda); border-radius: 5px; font-family: inherit; font-size: 13px; transition: all 0.15s; }
+  textarea { font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 12px; resize: vertical; line-height: 1.5; min-height: 50px; }
+  input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--amarelo); box-shadow: 0 0 0 2px rgba(255, 199, 44, 0.2); }
+  #inputBruto { min-height: 90px; }
+
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  button { padding: 10px 14px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; width: 100%; }
+  .btn-primario { background: var(--amarelo); color: var(--preto); }
+  .btn-primario:hover { background: #ffb800; }
+  .btn-secundario { background: var(--preto); color: var(--branco); }
+  .btn-secundario:hover { background: #333; }
+  .btn-azul { background: var(--azul-edicao); color: white; }
+  .btn-azul:hover { background: #1d4ed8; }
+  .btn-ghost { background: transparent; color: var(--cinza-texto); border: 1px solid var(--cinza-borda); }
+  .btn-ghost:hover { border-color: var(--preto); color: var(--preto); }
+
+  .botoes-export { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+
+  .editaveis { display: none; }
+  .editaveis.visivel { display: block; }
+
+  .aviso { font-size: 11px; color: var(--cinza-texto); line-height: 1.4; margin-top: 4px; }
+  .aviso-edicao { display: none; background: #eff6ff; border-left: 3px solid var(--azul-edicao); padding: 10px; border-radius: 4px; font-size: 11px; color: #1e40af; margin-bottom: 12px; }
+  body.modo-edicao .aviso-edicao { display: block; }
+
+  .secao-edicao { display: none; }
+  body.modo-edicao .secao-edicao { display: block; }
+
+  .item-texto-fixo { padding: 8px; background: #eff6ff; border-radius: 5px; margin-bottom: 8px; }
+  .item-texto-fixo input.texto-fixo-input { background: white; font-size: 12px; margin-bottom: 6px; }
+
+  .canvas-wrapper { background: #d8d8d8; border-radius: 6px; padding: 16px; display: flex; justify-content: center; align-items: flex-start; min-height: 600px; }
+  #canvas { max-width: 100%; height: auto; background: white; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+  #canvas.calibrando { cursor: crosshair; }
+
+  .placeholder { text-align: center; color: var(--cinza-texto); padding: 80px 20px; }
+  .placeholder svg { width: 56px; height: 56px; margin-bottom: 14px; opacity: 0.3; }
+
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--preto); color: var(--branco); padding: 12px 18px; border-radius: 6px; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0; transform: translateY(10px); transition: all 0.25s; pointer-events: none; max-width: 300px; }
+  .toast.visivel { opacity: 1; transform: translateY(0); }
+  .toast.erro { background: #c00; }
+  .toast.sucesso { background: var(--azul-edicao); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>FIK<span>C</span> — Gerador de Orçamentos</h1>
+    <div class="subtitulo">Cola → revisa → baixa</div>
+  </div>
+  <div class="badges">
+    <div class="badge-edicao off" id="badgeEdicao" onclick="alternarModoEdicao()">✏️ Modo Edição</div>
+    <div class="badge-cliente" id="badgeCliente" style="display:none;"></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="painel painel-controles">
+
+    <div class="aviso-edicao">
+      <strong>Modo Edição ativo.</strong> Cada campo mostra suas coordenadas. Use <strong>📍 Posicionar</strong> e clique no canvas pra reposicionar, ou edite os números direto. Ao terminar, baixe o <code>config.js</code> atualizado e suba pro GitHub.
+    </div>
+
+    <div class="secao" id="secaoUpload" style="display:none;">
+      <div class="secao-titulo"><span class="numero">1</span> Template em branco</div>
+      <input type="file" id="inputImagem" accept="image/png, image/jpeg">
+    </div>
+
+    <div class="secao">
+      <div class="secao-titulo"><span class="numero" id="numeroColar">1</span> Colar dados do FIKC App</div>
+      <textarea id="inputBruto" placeholder="Cole aqui o texto copiado do FIKC App..."></textarea>
+      <button class="btn-primario" style="margin-top: 8px;" onclick="processar()">✨ Processar e preencher</button>
+    </div>
+
+    <div class="secao editaveis" id="secaoEditaveis">
+      <div class="secao-titulo"><span class="numero" id="numeroRevisar">2</span> Revisar e editar</div>
+      <div id="camposDinamicos"></div>
+    </div>
+
+    <div class="secao secao-edicao">
+      <div class="secao-titulo">📐 Textos fixos do template</div>
+      <div id="textosFixosDinamicos"></div>
+    </div>
+
+    <div class="secao">
+      <div class="secao-titulo"><span class="numero" id="numeroBaixar">3</span> Baixar orçamento</div>
+      <div class="botoes-export">
+        <button class="btn-primario" onclick="baixarPNG()">📥 PNG</button>
+        <button class="btn-secundario" onclick="baixarPDF()">📄 PDF</button>
+      </div>
+    </div>
+
+    <div class="secao secao-edicao">
+      <div class="secao-titulo">💾 Exportar configuração</div>
+      <button class="btn-azul" onclick="exportarConfig()">📥 Baixar config.js atualizado</button>
+      <div class="aviso">Substitua o arquivo em <code>clientes/&lt;cliente&gt;/config.js</code> no GitHub e faça commit. O Vercel publica em segundos.</div>
+    </div>
+
+  </div>
+
+  <div class="painel">
+    <div class="canvas-wrapper">
+      <div class="placeholder" id="placeholder">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <div id="placeholderTexto">Carregando…</div>
+      </div>
+      <canvas id="canvas" style="display:none;"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =============================================================
+   CONFIG PADRÃO (fallback se não tiver cliente na URL)
+   ============================================================= */
+const CONFIG_PADRAO = {
+  nome: "Configurador",
+  template: null,
+  campos: [
+    { id: 'nome',          label: 'Nome do paciente', tipo: 'input',    x: 707, y: 320,  fonte: 'bold 52px Arial', cor: '#1a1a1a', alinhamento: 'center', maxLargura: 1000, alturaLinha: 64 },
+    { id: 'profissional',  label: 'Profissional',     tipo: 'input',    x: 707, y: 440,  fonte: '26px Arial',      cor: '#1a1a1a', alinhamento: 'center' },
+    { id: 'procedimentos', label: 'Procedimentos',    tipo: 'textarea', x: 160, y: 800,  fonte: '26px Arial',      cor: '#1a1a1a', maxLargura: 1100, alturaLinha: 38 },
+    { id: 'detalhes',      label: 'Detalhes do tratamento', tipo: 'textarea', x: 160, y: 1025, fonte: '26px Arial', cor: '#1a1a1a', maxLargura: 1100, alturaLinha: 38 },
+    { id: 'observacoes',   label: 'Observações',      tipo: 'textarea', x: 160, y: 1235, fonte: '26px Arial',      cor: '#1a1a1a', maxLargura: 1100, alturaLinha: 38 },
+    { id: 'honorarios',    label: 'Honorários',       tipo: 'textarea', x: 130, y: 1545, fonte: '26px Arial',      cor: '#1a1a1a', maxLargura: 1250, alturaLinha: 48 },
+    { id: 'cidade',        label: 'Cidade',           tipo: 'input',    valorPadrao: 'Curitiba', x: null, y: null },
+    { id: 'data',          label: 'Data',             tipo: 'input',    x: null, y: null },
+    { id: 'rodape',        tipo: 'computado', formato: '{cidade}, {data}', x: 1290, y: 1920, fonte: '22px Arial', cor: '#1a1a1a', alinhamento: 'right' },
+  ],
+  textosFixos: [
+    { texto: 'PLANO DE TRATAMENTO', x: 707, y: 615, fonte: '44px Arial', cor: '#555', alinhamento: 'center', letterSpacing: 14 },
+  ],
+  parser: {
+    nome:          { regex: 'plano de tratamento\\s+(.+?)\\s+procedimento\\(?s?\\)?', flags: 'is', destino: 'nome' },
+    procedimentos: { regex: 'procedimento\\(?s?\\)?\\s+(.+?)\\s+valor total', flags: 'is', destino: 'procedimentos', formato: 'fikc-lista' },
+    honorarios:    { regex: 'valor total do or[çc]amento\\s+(.+?)(?:\\s+observa|$)', flags: 'is', destino: 'honorarios', prefixo: 'Valor total: ' },
+    observacoes:   { regex: 'observa[çc][õo]es?\\s+do\\s+or[çc]amento\\s*(.*)$', flags: 'is', destino: 'observacoes' },
+  },
+};
+
+let CONFIG = JSON.parse(JSON.stringify(CONFIG_PADRAO));
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let imagemTemplate = null;
+let alvoCalibracao = null; // { tipo: 'campo'|'textoFixo', ref: <objeto> } ou null
+
+function toast(msg, tipo = 'sucesso') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast visivel ' + tipo;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('visivel'), 3000);
+}
+
+/* === Modo Edição === */
+function inicializarModoEdicao() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('edit') === 'true') ativarEdicao();
+}
+
+function alternarModoEdicao() {
+  document.body.classList.contains('modo-edicao') ? desativarEdicao() : ativarEdicao();
+}
+
+function ativarEdicao() {
+  document.body.classList.add('modo-edicao');
+  const badge = document.getElementById('badgeEdicao');
+  badge.classList.remove('off');
+  badge.textContent = '✏️ Edição';
+}
+
+function desativarEdicao() {
+  document.body.classList.remove('modo-edicao');
+  const badge = document.getElementById('badgeEdicao');
+  badge.classList.add('off');
+  badge.textContent = '✏️ Modo Edição';
+  cancelarCalibracao();
+}
+
+/* === Inicialização === */
+async function inicializar() {
+  inicializarModoEdicao();
+  const params = new URLSearchParams(location.search);
+  const cliente = params.get('cliente');
+
+  if (cliente) {
+    const seguro = cliente.replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!seguro) { mostrarPlaceholder('Código de cliente inválido.'); return; }
+    await carregarCliente(seguro);
+  } else {
+    document.getElementById('secaoUpload').style.display = 'block';
+    document.getElementById('numeroColar').textContent = '2';
+    document.getElementById('numeroRevisar').textContent = '3';
+    document.getElementById('numeroBaixar').textContent = '4';
+    mostrarPlaceholder('Faça upload do template em branco para começar.');
+    renderizarFormulario();
+    renderizarTextosFixosEdicao();
+  }
+}
+
+function mostrarPlaceholder(texto) {
+  document.getElementById('placeholderTexto').textContent = texto;
+  document.getElementById('placeholder').style.display = 'block';
+  canvas.style.display = 'none';
+}
+
+async function carregarCliente(cliente) {
+  try {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = `clientes/${cliente}/config.js?v=${Date.now()}`;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error(`Não encontrei /clientes/${cliente}/config.js`));
+      document.head.appendChild(s);
+    });
+    if (!window.CONFIG_CLIENTE) throw new Error('config.js não definiu window.CONFIG_CLIENTE');
+
+    CONFIG = JSON.parse(JSON.stringify(window.CONFIG_CLIENTE));
+    document.getElementById('badgeCliente').textContent = CONFIG.nome || cliente;
+    document.getElementById('badgeCliente').style.display = 'inline-block';
+
+    document.getElementById('secaoUpload').style.display = 'none';
+
+    const templateUrl = CONFIG.template || 'template.png';
+    const caminhoFinal = templateUrl.startsWith('http') || templateUrl.startsWith('/')
+      ? templateUrl : `clientes/${cliente}/${templateUrl}`;
+
+    await carregarImagemTemplate(caminhoFinal);
+    renderizarFormulario();
+    renderizarTextosFixosEdicao();
+    renderizar();
+  } catch (err) {
+    console.error(err);
+    mostrarPlaceholder(`Erro ao carregar cliente "${cliente}": ${err.message}`);
+    toast(err.message, 'erro');
+  }
+}
+
+function carregarImagemTemplate(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      imagemTemplate = img;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      document.getElementById('placeholder').style.display = 'none';
+      canvas.style.display = 'block';
+      resolve();
+    };
+    img.onerror = () => reject(new Error('Falha ao carregar template.'));
+    img.src = url;
+  });
+}
+
+document.getElementById('inputImagem').addEventListener('change', (e) => {
+  const arquivo = e.target.files[0]; if (!arquivo) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      imagemTemplate = img;
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      document.getElementById('placeholder').style.display = 'none';
+      canvas.style.display = 'block';
+      renderizar();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(arquivo);
+});
+
+/* === Renderiza o formulário dinâmico === */
+function renderizarFormulario() {
+  const div = document.getElementById('camposDinamicos');
+  div.innerHTML = '';
+
+  const cidade = CONFIG.campos.find(c => c.id === 'cidade');
+  const data   = CONFIG.campos.find(c => c.id === 'data');
+  const visiveis = CONFIG.campos.filter(c => (c.tipo === 'input' || c.tipo === 'textarea') && c.id !== 'cidade' && c.id !== 'data');
+
+  visiveis.forEach(campo => div.appendChild(criarGrupoCampo(campo)));
+
+  // Cidade + Data lado a lado
+  if (cidade || data) {
+    const row = document.createElement('div');
+    row.className = 'row-2';
+    if (cidade) row.appendChild(criarGrupoCampo(cidade, true));
+    if (data) {
+      if (!data.valorPadrao) data.valorPadrao = new Date().toLocaleDateString('pt-BR');
+      row.appendChild(criarGrupoCampo(data, true));
+    }
+    div.appendChild(row);
+  }
+
+  // Campos computados (rodapé) — só aparecem em modo edição, pra calibrar
+  CONFIG.campos.filter(c => c.tipo === 'computado').forEach(campo => {
+    const grupo = document.createElement('div');
+    grupo.className = 'grupo secao-edicao';
+    grupo.style.padding = '8px';
+    grupo.style.background = '#eff6ff';
+    grupo.style.borderRadius = '5px';
+    grupo.innerHTML = `
+      <div class="grupo-label-linha">
+        <label>📐 ${campo.id} <span style="font-weight:400;color:var(--cinza-texto);">(${campo.formato})</span></label>
+        <button class="btn-posicionar" onclick="iniciarCalibracao('campo','${campo.id}', this)">📍 Posicionar</button>
+      </div>
+      ${criarHTMLCoords(campo, 'campo', campo.id)}
+    `;
+    div.appendChild(grupo);
+  });
+
+  document.getElementById('secaoEditaveis').classList.add('visivel');
+}
+
+function criarGrupoCampo(campo, semCoords = false) {
+  const grupo = document.createElement('div');
+  grupo.className = 'grupo';
+  const inputId = 'campo-' + campo.id;
+  const valor = campo.valorPadrao || '';
+  const naoTemCoords = campo.x == null || semCoords;
+
+  const corpoInput = campo.tipo === 'textarea'
+    ? `<textarea id="${inputId}" placeholder="${campo.placeholder || ''}" oninput="renderizar()">${valor}</textarea>`
+    : `<input type="text" id="${inputId}" placeholder="${campo.placeholder || ''}" value="${valor}" oninput="renderizar()">`;
+
+  const botaoPos = naoTemCoords ? '' :
+    `<button class="btn-posicionar" onclick="iniciarCalibracao('campo','${campo.id}', this)">📍 Posicionar</button>`;
+
+  grupo.innerHTML = `
+    <div class="grupo-label-linha">
+      <label>${campo.label}</label>
+      ${botaoPos}
+    </div>
+    ${corpoInput}
+    ${naoTemCoords ? '' : criarHTMLCoords(campo, 'campo', campo.id)}
+  `;
+  return grupo;
+}
+
+function criarHTMLCoords(item, tipo, idOrIndex) {
+  return `
+    <div class="coords-edicao">
+      <span>X:</span>
+      <input type="number" value="${item.x ?? ''}" onchange="atualizarCoord('${tipo}','${idOrIndex}','x',this.value)">
+      <span>Y:</span>
+      <input type="number" value="${item.y ?? ''}" onchange="atualizarCoord('${tipo}','${idOrIndex}','y',this.value)">
+    </div>
+  `;
+}
+
+/* === Renderiza editor de textos fixos === */
+function renderizarTextosFixosEdicao() {
+  const div = document.getElementById('textosFixosDinamicos');
+  div.innerHTML = '';
+  if (!CONFIG.textosFixos || !CONFIG.textosFixos.length) {
+    div.innerHTML = '<div class="aviso">Nenhum texto fixo neste cliente.</div>';
+    return;
+  }
+  CONFIG.textosFixos.forEach((tf, idx) => {
+    const item = document.createElement('div');
+    item.className = 'item-texto-fixo';
+    item.innerHTML = `
+      <div class="grupo-label-linha">
+        <label>Texto fixo ${idx + 1}</label>
+        <button class="btn-posicionar" onclick="iniciarCalibracao('textoFixo',${idx}, this)">📍 Posicionar</button>
+      </div>
+      <input type="text" class="texto-fixo-input" value="${escapeAttr(tf.texto)}" onchange="atualizarTextoFixo(${idx}, this.value)">
+      ${criarHTMLCoords(tf, 'textoFixo', idx)}
+    `;
+    div.appendChild(item);
+  });
+}
+
+function escapeAttr(s) { return (s || '').replace(/"/g, '&quot;'); }
+
+function atualizarTextoFixo(idx, valor) {
+  CONFIG.textosFixos[idx].texto = valor;
+  renderizar();
+}
+
+function atualizarCoord(tipo, idOrIndex, eixo, valor) {
+  const num = parseInt(valor); if (isNaN(num)) return;
+  if (tipo === 'campo') {
+    const campo = CONFIG.campos.find(c => c.id === idOrIndex);
+    if (campo) campo[eixo] = num;
+  } else if (tipo === 'textoFixo') {
+    CONFIG.textosFixos[idOrIndex][eixo] = num;
+  }
+  renderizar();
+}
+
+/* === Calibração focada por campo === */
+function iniciarCalibracao(tipo, idOrIndex, botao) {
+  cancelarCalibracao();
+  alvoCalibracao = { tipo, idOrIndex, botao };
+  botao.classList.add('ativo');
+  botao.textContent = '⏺ Clique no canvas';
+  canvas.classList.add('calibrando');
+  toast('Agora clique no canvas onde o campo deve ficar.', 'sucesso');
+}
+
+function cancelarCalibracao() {
+  if (alvoCalibracao && alvoCalibracao.botao) {
+    alvoCalibracao.botao.classList.remove('ativo');
+    alvoCalibracao.botao.textContent = '📍 Posicionar';
+  }
+  alvoCalibracao = null;
+  canvas.classList.remove('calibrando');
+}
+
+canvas.addEventListener('click', (e) => {
+  if (!alvoCalibracao) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
+  const y = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
+
+  const { tipo, idOrIndex } = alvoCalibracao;
+  if (tipo === 'campo') {
+    const campo = CONFIG.campos.find(c => c.id === idOrIndex);
+    if (campo) { campo.x = x; campo.y = y; }
+  } else if (tipo === 'textoFixo') {
+    CONFIG.textosFixos[idOrIndex].x = x;
+    CONFIG.textosFixos[idOrIndex].y = y;
+  }
+
+  cancelarCalibracao();
+  renderizarFormulario();
+  renderizarTextosFixosEdicao();
+  renderizar();
+  toast(`Coordenadas atualizadas: x=${x}, y=${y}`);
+});
+
+/* === Parser === */
+function parseBruto(texto) {
+  const resultado = {};
+  if (!CONFIG.parser) return resultado;
+  Object.entries(CONFIG.parser).forEach(([chave, regraOuRegex]) => {
+    const regra = typeof regraOuRegex === 'string' ? { regex: regraOuRegex, flags: 'is', destino: chave } : regraOuRegex;
+    try {
+      const re = new RegExp(regra.regex, regra.flags || 'is');
+      const m = texto.match(re);
+      if (!m) return;
+      let valor = m[1].trim();
+      if (regra.formato === 'fikc-lista') valor = formatarListaFIKC(valor);
+      if (regra.prefixo) valor = regra.prefixo + valor;
+      if (regra.sufixo) valor = valor + regra.sufixo;
+      resultado[regra.destino || chave] = valor;
+    } catch (e) { console.warn('Regex inválida:', chave, e); }
+  });
+  return resultado;
+}
+
+function formatarListaFIKC(raw) {
+  const itens = raw.split('/').map(s => s.trim()).filter(Boolean);
+  return itens.map(item => {
+    const p = item.split('|').map(x => x.trim());
+    if (p.length >= 3) return `• ${p[0]} — ${p[1]} (${p[2]})`;
+    if (p.length === 2) return `• ${p[0]} — ${p[1]}`;
+    return `• ${item}`;
+  }).join('\n');
+}
+
+function processar() {
+  const bruto = document.getElementById('inputBruto').value;
+  if (!bruto.trim()) { toast('Cole o texto antes.', 'erro'); return; }
+  const dados = parseBruto(bruto);
+  Object.entries(dados).forEach(([id, valor]) => {
+    const el = document.getElementById('campo-' + id);
+    if (el) el.value = valor;
+  });
+  renderizar();
+  toast('Campos preenchidos. Revise e baixe.');
+}
+
+/* === Renderização do canvas === */
+function getValorCampo(id) { const el = document.getElementById('campo-' + id); return el ? el.value : ''; }
+
+function resolverComputado(campo) {
+  if (!campo.formato) return '';
+  return campo.formato.replace(/\{(\w+)\}/g, (_, chave) => getValorCampo(chave) || '');
+}
+
+function renderizar() {
+  if (!imagemTemplate) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(imagemTemplate, 0, 0);
+
+  (CONFIG.textosFixos || []).forEach(c => desenharCampo(c, c.texto));
+
+  CONFIG.campos.forEach(campo => {
+    if (campo.x == null || campo.y == null) return;
+    let valor = campo.tipo === 'computado'
+      ? resolverComputado(campo).replace(/^[,\s]+|[,\s]+$/g, '')
+      : getValorCampo(campo.id);
+    if (!valor) return;
+    desenharCampo(campo, valor);
+  });
+}
+
+function desenharCampo(campo, texto) {
+  ctx.font = campo.fonte;
+  ctx.fillStyle = campo.cor;
+  ctx.textAlign = campo.alinhamento || 'left';
+  ctx.textBaseline = 'alphabetic';
+  if (campo.letterSpacing) { desenharComLetterSpacing(texto, campo); return; }
+
+  const linhasManuais = texto.split('\n');
+  const tamanhoFonte = parseInt(campo.fonte.match(/(\d+)px/)[1]);
+  const alturaLinha = campo.alturaLinha || tamanhoFonte * 1.3;
+  let y = campo.y;
+  linhasManuais.forEach(linha => {
+    if (campo.maxLargura) y = desenharLinhasQuebradas(linha, campo, y, alturaLinha);
+    else { ctx.fillText(linha, campo.x, y); y += alturaLinha; }
+  });
+}
+
+function desenharLinhasQuebradas(texto, campo, yInicial, alturaLinha) {
+  const palavras = texto.split(' ');
+  let linha = '', y = yInicial;
+  for (const palavra of palavras) {
+    const teste = linha ? linha + ' ' + palavra : palavra;
+    if (ctx.measureText(teste).width > campo.maxLargura && linha) {
+      ctx.fillText(linha, campo.x, y); linha = palavra; y += alturaLinha;
+    } else linha = teste;
+  }
+  if (linha) { ctx.fillText(linha, campo.x, y); y += alturaLinha; }
+  return y;
+}
+
+function desenharComLetterSpacing(texto, campo) {
+  const letras = texto.split('');
+  const larguras = letras.map(l => ctx.measureText(l).width + campo.letterSpacing);
+  const larguraTotal = larguras.reduce((a, b) => a + b, 0) - campo.letterSpacing;
+  let x = campo.x;
+  if (campo.alinhamento === 'center') x -= larguraTotal / 2;
+  else if (campo.alinhamento === 'right') x -= larguraTotal;
+  ctx.textAlign = 'left';
+  letras.forEach((letra, i) => { ctx.fillText(letra, x, campo.y); x += larguras[i]; });
+}
+
+/* === Exportação do orçamento === */
+function baixarPNG() {
+  if (!imagemTemplate) { toast('Sem template.', 'erro'); return; }
+  const link = document.createElement('a');
+  const nome = (getValorCampo('nome') || 'orcamento').replace(/[^a-zA-Z0-9-_]/g, '_');
+  link.download = `orcamento-${nome}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+function baixarPDF() {
+  if (!imagemTemplate) { toast('Sem template.', 'erro'); return; }
+  const { jsPDF } = window.jspdf;
+  const orient = canvas.width > canvas.height ? 'landscape' : 'portrait';
+  const pdf = new jsPDF({ orientation: orient, unit: 'mm', format: 'a4' });
+  const lW = orient === 'portrait' ? 210 : 297, lH = orient === 'portrait' ? 297 : 210;
+  pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, lW, lH);
+  const nome = (getValorCampo('nome') || 'orcamento').replace(/[^a-zA-Z0-9-_]/g, '_');
+  pdf.save(`orcamento-${nome}.pdf`);
+}
+
+/* === Exportar config.js === */
+function exportarConfig() {
+  // Faz uma cópia sem os valores temporários dos inputs
+  const exp = JSON.parse(JSON.stringify(CONFIG));
+  const cabecalho =
+`/* =============================================================
+   CONFIGURAÇÃO EXPORTADA EM ${new Date().toLocaleString('pt-BR')}
+   Substitua o arquivo clientes/<cliente>/config.js por este.
+   ============================================================= */
+
+`;
+  const corpo = `window.CONFIG_CLIENTE = ${JSON.stringify(exp, null, 2)};\n`;
+  const blob = new Blob([cabecalho + corpo], { type: 'application/javascript' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'config.js';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('config.js baixado. Suba pro GitHub.');
+}
+
+inicializar();
+</script>
+</body>
+</html>

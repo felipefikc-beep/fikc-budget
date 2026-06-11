@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/clientes/:path*", "destination": "/clientes/:path*" },
+    { "source": "/:cliente", "destination": "/index.html?cliente=:cliente" }
+  ]
+}
